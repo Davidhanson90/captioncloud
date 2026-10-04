@@ -14,13 +14,22 @@ you've your yours yourself yourselves
 ah uh um hmm oh okay ok yeah yes no hey hi hello gonna wanna kinda sorta like just
 really very actually basically literally right well thing things something anything
 everything nothing someone anyone everyone
+across almost along already also although always among amongst another anyhow
+anyway anyways anywhere around beside besides beyond despite either else
+elsewhere enough even ever every everybody everywhere get going got gotta
+however indeed know least less let many may maybe might mine moreover mostly
+much must neither never nevertheless nobody none nowhere now often one onto
+others otherwise per perhaps probably quite rather several shall somehow
+sometime sometimes somewhere still therefore think though throughout thus
+together toward towards unless upon us via whatever whenever whereas whereby
+wherever whether whichever whoever whose will within without yet
 `;
 
 const STOPWORDS = new Set(
   STOPWORD_TEXT.split(/\s+/)
     .filter(Boolean)
     .map((word) => word.toLowerCase().replace(/'/g, ""))
-    .filter((word) => !["id", "ill", "im", "lets", "well", "hes", "shes"].includes(word))
+    .filter((word) => !["id", "ill", "im", "lets", "hes", "shes"].includes(word))
 );
 
 export interface WordCount {
