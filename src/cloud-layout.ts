@@ -3,6 +3,8 @@ import type { WordCount } from "./words";
 export interface PlacedWord {
   text: string;
   count: number;
+  /** First caption time, seconds, copied from the word list when the track is timed. */
+  firstAt?: number;
   /** Center, in the same pixel space as the canvas buffer. */
   x: number;
   y: number;
@@ -104,6 +106,7 @@ function pack(words: WordCount[], width: number, height: number, measure: Measur
         placed.push({
           text: word.text,
           count: word.count,
+          firstAt: word.firstAt,
           x: spot.x,
           y: spot.y,
           fontSize,

@@ -26,6 +26,15 @@ const STOPWORDS = new Set(
 export interface WordCount {
   text: string;
   count: number;
+  /** First caption time that says this word, in seconds, when the source is timed. */
+  firstAt?: number;
+}
+
+export interface SpokenToken {
+  /** Letters only, used for counts and stopwords. */
+  key: string;
+  /** Lowercase token with internal apostrophes kept, for phrase display. */
+  display: string;
 }
 
 export interface WordStats {
@@ -36,22 +45,49 @@ export interface WordStats {
 
 const TOKEN = /[a-z0-9]+(?:'[a-z0-9]+)*/gi;
 
-export function wordStats(text: string, limit = 80): WordStats {
+export function spokenTokens(text: string): SpokenToken[] {
+  const tokens: SpokenToken[] = [];
+  for (const match of text.matchAll(TOKEN)) {
+    const display = match[0].toLowerCase().replace(/^'+|'+$/g, "");
+    const key = display.replace(/'/g, "");
+    if (!key || /^\d+$/.test(key)) continue;
+    tokens.push({ key, display });
+  }
+  return tokens;
+}
+
+export function isStopword(word: string): boolean {
+  return STOPWORDS.has(word);
+}
+
+/** First cue time for each cloud word. `text` must already be cleaned caption text. */
+export function firstSeenWords(parts: { start: number; text: string }[]): Map<string, number> {
+  const seen = new Map<string, number>();
+  for (const part of parts) {
+    if (!Number.isFinite(part.start)) continue;
+    for (const token of spokenTokens(part.text)) {
+      if (token.key.length < 3 || STOPWORDS.has(token.key) || seen.has(token.key)) continue;
+      seen.set(token.key, part.start);
+    }
+  }
+  return seen;
+}
+
+export function wordStats(text: string, limit = 80, firstSeen?: ReadonlyMap<string, number>): WordStats {
   const counts = new Map<string, number>();
   let wordCount = 0;
-  for (const match of text.matchAll(TOKEN)) {
-    const raw = match[0].toLowerCase().replace(/^'+|'+$/g, "");
-    const letters = raw.replace(/'/g, "");
-    if (!letters || /^\d+$/.test(letters)) continue;
+  for (const token of spokenTokens(text)) {
     wordCount += 1;
-    if (letters.length < 3) continue;
-    if (STOPWORDS.has(letters)) continue;
-    counts.set(letters, (counts.get(letters) ?? 0) + 1);
+    if (token.key.length < 3 || STOPWORDS.has(token.key)) continue;
+    counts.set(token.key, (counts.get(token.key) ?? 0) + 1);
   }
   const top = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, limit)
-    .map(([text, count]) => ({ text, count }));
+    .map(([text, count]) => {
+      const firstAt = firstSeen?.get(text);
+      return firstAt == null ? { text, count } : { text, count, firstAt };
+    });
   return { wordCount, top };
 }
 

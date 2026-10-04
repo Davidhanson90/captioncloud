@@ -1,9 +1,11 @@
 /// <reference types="vite/client" />
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type TemplateResult } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
-import { DEMO_VIDEO_ID, loadYouTubeCaptions, parseVideoId, type LoadedCaptions } from "./captions";
+import { keyed } from "lit/directives/keyed.js";
+import { DEMO_VIDEO_ID, cleanCaptionText, loadYouTubeCaptions, parseVideoId, type LoadedCaptions } from "./captions";
 import { layoutCloud, type PlacedWord } from "./cloud-layout";
-import { previewText, wordStats, type WordCount } from "./words";
+import { captionInsights, formatClock, type CaptionInsights, type QuietGap, type RepeatedPhrase } from "./insights";
+import { firstSeenWords, previewText, wordStats, type WordCount } from "./words";
 
 
 const CLOUD_FAMILY = "ui-sans-serif, system-ui, sans-serif";
@@ -33,6 +35,24 @@ function setCloudFont(ctx: CanvasRenderingContext2D, fontSize: number, fontWeigh
   ctx.font = `${fontWeight} ${fontSize * dpr}px ${CLOUD_FAMILY}`;
   const tracking = fontSize >= 36 ? -0.02 * fontSize * dpr : 0;
   ctx.letterSpacing = `${tracking}px`;
+}
+
+
+function gapLabel(gap: QuietGap): string {
+  const clock = formatClock(gap.at);
+  const quiet = formatQuiet(gap.seconds);
+  const bridge = [gap.before, gap.after].filter(Boolean).join(" → ");
+  return bridge ? `${clock} · ${quiet} · ${bridge}` : `${clock} · ${quiet}`;
+}
+
+function phraseLabel(phrase: RepeatedPhrase): string {
+  return `${phrase.count}× ${phrase.text} · ${formatClock(phrase.at)}`;
+}
+
+function formatQuiet(seconds: number): string {
+  const rounded = Math.round(seconds * 10) / 10;
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return `${text}s quiet`;
 }
 
 @customElement("caption-cloud")
@@ -151,6 +171,7 @@ export class CaptionCloud extends LitElement {
       padding: 3px 8px;
       font-size: 0.82rem;
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     aside {
       background: #141a24;
@@ -158,6 +179,15 @@ export class CaptionCloud extends LitElement {
       border-radius: 12px;
       max-height: 520px;
       overflow: auto;
+    }
+    .player {
+      display: block;
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 16 / 9;
+      border: 0;
+      border-radius: 12px;
+      background: #000;
     }
     aside h2 {
       margin: 0;
@@ -171,12 +201,12 @@ export class CaptionCloud extends LitElement {
       top: 0;
       background: #141a24;
     }
-    ol {
+    aside ol {
       list-style: none;
       margin: 0;
       padding: 0 8px 10px;
     }
-    li {
+    aside li {
       display: flex;
       justify-content: space-between;
       gap: 10px;
@@ -185,13 +215,102 @@ export class CaptionCloud extends LitElement {
       font-variant-numeric: tabular-nums;
       color: #c5d0dc;
     }
-    li.on,
-    li:hover {
+    aside li.on,
+    aside li:hover {
       background: #1d2a3c;
       color: #e7edf4;
     }
-    li span:last-child {
+    aside li.seek {
+      cursor: pointer;
+    }
+    aside li span:last-child {
       color: #9aa8b8;
+    }
+    .insights {
+      display: grid;
+      gap: 16px;
+      background: #141a24;
+      border: 1px solid #1c2430;
+      border-radius: 12px;
+      padding: 14px 14px 16px;
+    }
+    .insights h2 {
+      margin: 0;
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #9aa8b8;
+      font-weight: 650;
+    }
+    .block {
+      display: grid;
+      gap: 8px;
+    }
+    .wpm {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+    }
+    .wpm span,
+    .scale,
+    .quiet {
+      color: #9aa8b8;
+      font-weight: 500;
+    }
+    .wpm span {
+      font-size: 0.85rem;
+    }
+    .bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 64px;
+    }
+    .bars i {
+      flex: 1;
+      display: block;
+      background: #7dcec4;
+      border-radius: 2px 2px 0 0;
+      min-height: 3px;
+      opacity: 0.9;
+    }
+    .scale {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .jumps {
+      display: grid;
+      gap: 6px;
+    }
+    .insights button {
+      width: 100%;
+      text-align: left;
+      line-height: 1.35;
+    }
+    .insights button strong {
+      font-weight: 650;
+    }
+    .speaker {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 2px 10px;
+      align-items: baseline;
+      font-variant-numeric: tabular-nums;
+    }
+    .meter {
+      grid-column: 1 / -1;
+      height: 6px;
+      border-radius: 99px;
+      background: #1a2330;
+      overflow: hidden;
+    }
+    .meter i {
+      display: block;
+      height: 100%;
+      background: #8ec6e0;
     }
     details {
       color: #9aa8b8;
@@ -248,6 +367,9 @@ export class CaptionCloud extends LitElement {
   @state() private tipY = 0;
   @state() private copied = false;
   @state() private thumbHidden = false;
+  @state() private playAt: number | null = null;
+  @state() private playNonce = 0;
+  @state() private insights: CaptionInsights | null = null;
 
   @query("canvas") private canvas?: HTMLCanvasElement;
 
@@ -356,14 +478,21 @@ export class CaptionCloud extends LitElement {
   }
 
   private applyText(loaded: LoadedCaptions): void {
-    const stats = wordStats(loaded.text);
+    const cues = loaded.cues ?? [];
+    const firstSeen = cues.length
+      ? firstSeenWords(cues.map((cue) => ({ start: cue.start, text: cleanCaptionText(cue.text) })))
+      : undefined;
+    const stats = wordStats(loaded.text, 80, firstSeen);
     this.loaded = loaded;
     this.wordCount = stats.wordCount;
     this.words = stats.top;
+    this.insights = cues.length ? captionInsights(cues) : null;
     this.hover = "";
     this.tip = "";
     this.copied = false;
     this.thumbHidden = false;
+    this.playAt = null;
+    this.playNonce = 0;
     replaceVideoParam(loaded.videoId);
   }
 
@@ -403,12 +532,13 @@ export class CaptionCloud extends LitElement {
     const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
     const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
     const hit = this.hitWord(x, y);
-    canvas.style.cursor = hit ? "pointer" : "default";
+    const seekable = hit?.firstAt != null && !!this.loaded?.videoId;
+    canvas.style.cursor = seekable ? "pointer" : "default";
     const next = hit?.text ?? "";
     if (next !== this.hover) this.hover = next;
     if (hit) {
-      this.tip = `${hit.text} · ${hit.count}`;
-      this.tipX = Math.max(8, Math.min(rect.width - 96, event.clientX - rect.left + 12));
+      this.tip = hit.firstAt == null ? `${hit.text} · ${hit.count}` : `${hit.text} · ${hit.count} · ${formatClock(hit.firstAt)}`;
+      this.tipX = Math.max(8, Math.min(Math.max(8, rect.width - 210), event.clientX - rect.left + 12));
       this.tipY = Math.max(8, Math.min(rect.height - 28, event.clientY - rect.top + 14));
     } else if (this.tip) {
       this.tip = "";
@@ -429,6 +559,21 @@ export class CaptionCloud extends LitElement {
       if (Math.abs(lx) <= word.width / 2 + slop && Math.abs(ly) <= word.height / 2 + slop) return word;
     }
     return undefined;
+  }
+
+  private onClick(event: MouseEvent): void {
+    const canvas = this.canvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+    this.seekTo(this.hitWord(x, y)?.firstAt);
+  }
+
+  private seekTo(seconds: number | undefined): void {
+    if (!this.loaded?.videoId || seconds == null || !Number.isFinite(seconds)) return;
+    this.playNonce += 1;
+    this.playAt = Math.max(0, Math.floor(seconds));
   }
 
   private onLeave(): void {
@@ -485,6 +630,90 @@ export class CaptionCloud extends LitElement {
     }
   }
 
+  private renderInsights(insights: CaptionInsights): TemplateResult {
+    const maxWpm = Math.max(1, ...insights.buckets.map((bucket) => bucket.wpm));
+    const maxSpeaker = Math.max(1, ...insights.speakers.map((speaker) => speaker.words));
+    const first = insights.buckets[0];
+    const last = insights.buckets[insights.buckets.length - 1];
+    return html`
+      <section class="insights">
+        ${insights.wpm > 0
+          ? html`
+              <div class="block">
+                <h2>Pacing</h2>
+                <p class="wpm">${Math.round(insights.wpm).toLocaleString()} <span>words per minute</span></p>
+                ${insights.buckets.length
+                  ? html`
+                      <div
+                        class="bars"
+                        role="img"
+                        aria-label=${`Words per minute across the video, averaging ${Math.round(insights.wpm)}`}
+                      >
+                        ${insights.buckets.map(
+                          (bucket) => html`
+                            <i
+                              style=${`height:${Math.max(4, Math.round((bucket.wpm / maxWpm) * 64))}px`}
+                              title=${`${formatClock(bucket.start)}–${formatClock(bucket.end)} · ${Math.round(bucket.wpm)} wpm`}
+                            ></i>
+                          `
+                        )}
+                      </div>
+                      ${first && last
+                        ? html`<div class="scale"><span>${formatClock(first.start)}</span><span>${formatClock(last.end)}</span></div>`
+                        : null}
+                    `
+                  : null}
+              </div>
+            `
+          : null}
+        ${insights.gaps.length
+          ? html`
+              <div class="block">
+                <h2>Quiet breaks</h2>
+                <div class="jumps">
+                  ${insights.gaps.map(
+                    (gap) => html`
+                      <button type="button" @click=${() => this.seekTo(gap.at)}>${gapLabel(gap)}</button>
+                    `
+                  )}
+                </div>
+              </div>
+            `
+          : null}
+        ${insights.phrases.length
+          ? html`
+              <div class="block">
+                <h2>Repeated phrases</h2>
+                <div class="jumps">
+                  ${insights.phrases.map(
+                    (phrase) => html`
+                      <button type="button" @click=${() => this.seekTo(phrase.at)}>${phraseLabel(phrase)}</button>
+                    `
+                  )}
+                </div>
+              </div>
+            `
+          : null}
+        ${insights.speakers.length
+          ? html`
+              <div class="block">
+                <h2>Who talks most</h2>
+                ${insights.speakers.map(
+                  (speaker) => html`
+                    <div class="speaker">
+                      <span>${speaker.name}</span>
+                      <span class="quiet">${speaker.words.toLocaleString()} words</span>
+                      <div class="meter"><i style=${`width:${(speaker.words / maxSpeaker) * 100}%`}></i></div>
+                    </div>
+                  `
+                )}
+              </div>
+            `
+          : null}
+      </section>
+    `;
+  }
+
   override render() {
     const loaded = this.loaded;
     const preview = loaded ? previewText(loaded.text) : "";
@@ -492,7 +721,7 @@ export class CaptionCloud extends LitElement {
       <div class="wrap">
         <div>
           <h1>captioncloud</h1>
-          <p class="hint">Load a YouTube video that already has captions and draw a word cloud from the words.</p>
+          <p class="hint">Load a YouTube video that already has captions and draw a word cloud from the words. Click a word to play the first time it is said.</p>
         </div>
         <form class="row" @submit=${this.onSubmit}>
           <input
@@ -532,36 +761,57 @@ export class CaptionCloud extends LitElement {
                 </p>
                 <p class="preview">${preview}</p>
               </div>
-              ${loaded.videoId && !this.thumbHidden
-                ? html`<img
-                    class="thumb"
-                    alt=""
-                    src="https://i.ytimg.com/vi/${loaded.videoId}/hqdefault.jpg"
-                    @error=${this.onThumbError}
-                  />`
-                : null}
+              ${loaded.videoId && this.playAt != null
+                ? keyed(
+                    this.playNonce,
+                    html`<iframe
+                      class="player"
+                      title=${loaded.title ? `Play ${loaded.title}` : "Play video"}
+                      src=${`https://www.youtube.com/embed/${loaded.videoId}?start=${this.playAt}&autoplay=1`}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowfullscreen
+                    ></iframe>`
+                  )
+                : loaded.videoId && !this.thumbHidden
+                  ? html`<img
+                      class="thumb"
+                      alt=""
+                      src="https://i.ytimg.com/vi/${loaded.videoId}/hqdefault.jpg"
+                      @error=${this.onThumbError}
+                    />`
+                  : null}
               <div class="stage">
                 <div class="cloud">
-                  <canvas @mousemove=${this.onMove} @mouseleave=${this.onLeave}></canvas>
+                  <canvas @mousemove=${this.onMove} @mouseleave=${this.onLeave} @click=${this.onClick}></canvas>
                   ${this.tip ? html`<div class="tip" style="left:${this.tipX}px;top:${this.tipY}px">${this.tip}</div>` : null}
                 </div>
                 <aside>
                   <h2>Counts</h2>
                   <ol>
-                    ${this.words.map(
-                      (word) => html`
-                        <li class=${word.text === this.hover ? "on" : ""} @mouseenter=${() => (this.hover = word.text)} @mouseleave=${this.onLeave}>
-                          <span>${word.text}</span><span>${word.count}</span>
+                    ${this.words.map((word) => {
+                      const seek = word.firstAt != null && !!loaded.videoId;
+                      const cls = `${word.text === this.hover ? "on" : ""}${seek ? " seek" : ""}`;
+                      return html`
+                        <li
+                          class=${cls}
+                          @mouseenter=${() => (this.hover = word.text)}
+                          @mouseleave=${this.onLeave}
+                          @click=${() => this.seekTo(word.firstAt)}
+                        >
+                          <span>${word.text}</span>
+                          <span>${seek ? `${word.count} · ${formatClock(word.firstAt ?? 0)}` : word.count}</span>
                         </li>
-                      `
-                    )}
+                      `;
+                    })}
                   </ol>
                 </aside>
               </div>
+              ${this.insights ? this.renderInsights(this.insights) : null}
             `
           : null}
         <details>
           <summary>Paste a transcript instead</summary>
+          <p class="hint">Pasted text has no timestamps. Clicking a word does not play a video.</p>
           <textarea
             .value=${this.paste}
             placeholder="If a video has no captions, you can paste the words here."

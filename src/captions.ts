@@ -3,12 +3,23 @@ export const DEMO_VIDEO_ID = "arj7oStGLkU";
 
 const ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
+export interface CaptionCue {
+  /** Cue start, seconds. */
+  start: number;
+  /** Cue end, seconds. Same as start when the track omits a duration. */
+  end: number;
+  /** Raw cue text, before word cleanup. */
+  text: string;
+}
+
 export interface LoadedCaptions {
   videoId: string;
   title: string;
   languageCode: string;
   languageName: string;
   text: string;
+  /** Timed cues when the track has them. Omitted for pasted text. */
+  cues?: CaptionCue[];
 }
 
 export function parseVideoId(input: string): string | null {
@@ -231,13 +242,82 @@ export async function loadYouTubeCaptions(videoId: string): Promise<LoadedCaptio
   const [loaded, oembedTitle] = await Promise.all([fetchViaNullOrigin(videoId), fetchOEmbedTitle(videoId)]);
   const text = captionsToText(loaded.body);
   if (!text) throw new Error("This video's caption track had no words.");
+  const cues = parseCaptionCues(loaded.body);
   return {
     videoId,
     title: loaded.title || oembedTitle,
     languageCode: loaded.languageCode,
     languageName: loaded.languageName || loaded.languageCode,
-    text
+    text,
+    ...(cues.length ? { cues } : {})
   };
+}
+
+/** Cue timings from a json3 or timed-text body. Empty when the body has no timestamps. */
+export function parseCaptionCues(body: string): CaptionCue[] {
+  const trimmed = body.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("{") || trimmed.includes('"wireMagic"')) {
+    try {
+      const cues = json3Cues(trimmed);
+      if (cues.length) return cues;
+    } catch {
+      /* XML */
+    }
+  }
+  return xmlCues(trimmed);
+}
+
+function json3Cues(raw: string): CaptionCue[] {
+  const data = JSON.parse(raw) as {
+    events?: { tStartMs?: number; dDurationMs?: number; segs?: { utf8?: string }[] }[];
+  };
+  const cues: CaptionCue[] = [];
+  for (const event of data.events ?? []) {
+    if (typeof event.tStartMs !== "number" || !event.segs?.length) continue;
+    const text = event.segs.map((seg) => seg.utf8 ?? "").join("");
+    if (!text.trim()) continue;
+    const start = Math.max(0, event.tStartMs / 1000);
+    const dur = typeof event.dDurationMs === "number" ? Math.max(0, event.dDurationMs / 1000) : 0;
+    cues.push({ start, end: start + dur, text });
+  }
+  return cues;
+}
+
+function xmlCues(raw: string): CaptionCue[] {
+  const doc = new DOMParser().parseFromString(raw, "text/xml");
+  if (doc.querySelector("parsererror")) return [];
+  const cues: CaptionCue[] = [];
+  for (const node of doc.querySelectorAll("text, p")) {
+    const text = node.textContent ?? "";
+    if (!text.trim()) continue;
+    const timed = xmlCueTiming(node);
+    if (!timed) continue;
+    cues.push({ start: timed.start, end: timed.end, text });
+  }
+  return cues;
+}
+
+function xmlCueTiming(node: Element): { start: number; end: number } | null {
+  if (node.hasAttribute("t")) {
+    const start = numberAttr(node, "t");
+    if (start == null) return null;
+    const dur = numberAttr(node, "d") ?? 0;
+    const startSec = Math.max(0, start / 1000);
+    return { start: startSec, end: startSec + Math.max(0, dur) / 1000 };
+  }
+  const start = numberAttr(node, "start");
+  if (start == null) return null;
+  const dur = numberAttr(node, "dur") ?? 0;
+  const startSec = Math.max(0, start);
+  return { start: startSec, end: startSec + Math.max(0, dur) };
+}
+
+function numberAttr(node: Element, name: string): number | null {
+  const raw = node.getAttribute(name);
+  if (raw == null || raw.trim() === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
 }
 
 export function captionsToText(body: string): string {

@@ -1,6 +1,6 @@
 # captioncloud
 
-Paste a YouTube URL and draw a word cloud from that video's public caption track. Everything runs in the browser. There is no API key and no speech-to-text. The video has to already have captions.
+Paste a YouTube URL and draw a word cloud from that video's public caption track. Click a word to play the video from the first time it is said. Everything runs in the browser. There is no API key and no speech-to-text. The video has to already have captions.
 
 **Live:** [https://davidhanson90.github.io/captioncloud/](https://davidhanson90.github.io/captioncloud/)
 
@@ -22,15 +22,25 @@ npm run preview
 
 1. Paste a YouTube URL or an 11-character video id.
 2. Press **Load captions**.
-3. Hover a word in the cloud, or the list beside it, to see how many times it appears.
+3. Hover a word in the cloud, or the list beside it, to see how many times it appears. When the captions are timed, the hover also shows the first time that word is said, as `m:ss`.
 
 After a YouTube video loads, the address bar gains `?v=VIDEO_ID` (via `history.replaceState`, so it can be copied). **Copy link** copies the full URL for this deployment, built from the Vite base: on the live site that is `https://davidhanson90.github.io/captioncloud/?v=VIDEO_ID`, and in dev it is `http://localhost:5173/captioncloud/?v=VIDEO_ID`. Opening that link fills the input and loads the cloud with no extra click. Pasted transcripts stay on the page only. They clear `?v=`, and they are not shareable links.
+
+Click a word in the cloud or in the side list to play from the first caption that contains it. The player is a normal YouTube embed, `https://www.youtube.com/embed/VIDEO_ID?start=SECONDS&autoplay=1`, in the thumbnail's place. It does not use a YouTube API key. Hover still shows the count, and the timestamp when there is one. A pasted transcript has no timestamps, so those clicks do nothing and no player appears.
 
 **Try a TED talk** loads [Inside the Mind of a Master Procrastinator](https://www.youtube.com/watch?v=arj7oStGLkU) (`arj7oStGLkU`). That video has an English caption track. It was the one checked while building this demo: the track starts "So in college,".
 
 The page shows the video title when YouTube returns it, the caption language, how many words were in the track, and the first ~400 characters. Above the cloud, a public thumbnail (`https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg`) is shown once a video id is loaded, including when the page opens with `?v=`. Pasted transcripts have no video id, so the thumbnail stays hidden. If that image fails to load, it is hidden without an error.
 
-English stopwords are dropped, and so are words shorter than 3 letters. The cloud is the top 80 remaining words, sized by count. Stage directions such as `(Laughter)` and `[Music]` are removed. Timestamps are not shown.
+English stopwords are dropped, and so are words shorter than 3 letters. The cloud is the top 80 remaining words, sized by count. Stage directions such as `(Laughter)` and `[Music]` are removed.
+
+Timed captions also feed a panel under the cloud:
+
+- Words per minute for the whole video, plus a bar of words per minute across a few equal slices.
+- The longest quiet gaps, about two seconds or more. Each one shows the clock, how long the pause is, and the words just before and after. Clicking it seeks the player the same way a word does.
+- Repeated phrases: consecutive 2 to 4 word sequences said more than once, with a count and a click to the first time that phrase is said.
+- Who talks most, only when a cue is labeled `Name:` or `>> Name`. If the track has no speaker labels, that section is hidden.
+
 
 If a video has no caption track, the page says so. **Paste a transcript instead** builds a cloud from text you already have. That path is only a fallback. A normal captioned video does not need it.
 
