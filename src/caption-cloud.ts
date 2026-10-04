@@ -4,6 +4,15 @@ import { DEMO_VIDEO_ID, loadYouTubeCaptions, parseVideoId, type LoadedCaptions }
 import { layoutCloud, type PlacedWord } from "./cloud-layout";
 import { previewText, wordStats, type WordCount } from "./words";
 
+
+const CLOUD_FAMILY = "ui-sans-serif, system-ui, sans-serif";
+
+function setCloudFont(ctx: CanvasRenderingContext2D, fontSize: number, fontWeight: number, dpr: number): void {
+  ctx.font = `${fontWeight} ${fontSize * dpr}px ${CLOUD_FAMILY}`;
+  const tracking = fontSize >= 36 ? -0.02 * fontSize * dpr : 0;
+  ctx.letterSpacing = `${tracking}px`;
+}
+
 @customElement("caption-cloud")
 export class CaptionCloud extends LitElement {
   static override styles = css`
@@ -15,7 +24,7 @@ export class CaptionCloud extends LitElement {
       font: 15px/1.45 ui-sans-serif, system-ui, sans-serif;
     }
     .wrap {
-      max-width: 1100px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 22px 20px 40px;
       display: grid;
@@ -81,7 +90,7 @@ export class CaptionCloud extends LitElement {
     }
     .stage {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 250px;
+      grid-template-columns: minmax(0, 1fr) 230px;
       gap: 14px;
       align-items: start;
     }
@@ -89,13 +98,14 @@ export class CaptionCloud extends LitElement {
       background: #141a24;
       border: 1px solid #1c2430;
       border-radius: 12px;
-      min-height: 420px;
+      min-height: 520px;
       position: relative;
+      box-shadow: inset 0 0 70px rgba(0, 0, 0, 0.22);
     }
     canvas {
       display: block;
       width: 100%;
-      height: 560px;
+      height: 520px;
       cursor: default;
     }
     .tip {
@@ -113,7 +123,7 @@ export class CaptionCloud extends LitElement {
       background: #141a24;
       border: 1px solid #1c2430;
       border-radius: 12px;
-      max-height: 560px;
+      max-height: 520px;
       overflow: auto;
     }
     aside h2 {
@@ -177,13 +187,16 @@ export class CaptionCloud extends LitElement {
       .stage {
         grid-template-columns: 1fr;
       }
+      .cloud {
+        min-height: 440px;
+      }
       canvas,
       aside {
         height: auto;
-        max-height: 480px;
+        max-height: 440px;
       }
       canvas {
-        height: 460px;
+        height: 440px;
       }
     }
   `;
@@ -204,6 +217,7 @@ export class CaptionCloud extends LitElement {
   @query("canvas") private canvas?: HTMLCanvasElement;
 
   private placed: PlacedWord[] = [];
+  private layoutKey = "";
   private resizeObs?: ResizeObserver;
   private requestToken = 0;
 
@@ -302,33 +316,47 @@ export class CaptionCloud extends LitElement {
     const rect = canvas.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
     const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
-    const hit = this.placed.find((word) => {
-      const left = word.x - word.width / 2;
-      const top = word.y - word.height / 2;
-      return x >= left && x <= left + word.width && y >= top && y <= top + word.height;
-    });
+    const hit = this.hitWord(x, y);
+    canvas.style.cursor = hit ? "pointer" : "default";
     const next = hit?.text ?? "";
     if (next !== this.hover) this.hover = next;
     if (hit) {
       this.tip = `${hit.text} · ${hit.count}`;
-      this.tipX = event.clientX - rect.left + 12;
-      this.tipY = event.clientY - rect.top + 14;
+      this.tipX = Math.max(8, Math.min(rect.width - 96, event.clientX - rect.left + 12));
+      this.tipY = Math.max(8, Math.min(rect.height - 28, event.clientY - rect.top + 14));
     } else if (this.tip) {
       this.tip = "";
     }
   }
 
+  private hitWord(x: number, y: number): PlacedWord | undefined {
+    const slop = 6;
+    for (let i = this.placed.length - 1; i >= 0; i--) {
+      const word = this.placed[i];
+      if (!word) continue;
+      const dx = x - word.x;
+      const dy = y - word.y;
+      const cos = Math.cos(word.rotation);
+      const sin = Math.sin(word.rotation);
+      const lx = dx * cos + dy * sin;
+      const ly = -dx * sin + dy * cos;
+      if (Math.abs(lx) <= word.width / 2 + slop && Math.abs(ly) <= word.height / 2 + slop) return word;
+    }
+    return undefined;
+  }
+
   private onLeave(): void {
     this.hover = "";
     this.tip = "";
+    if (this.canvas) this.canvas.style.cursor = "default";
   }
 
   private draw(): void {
     const canvas = this.canvas;
     if (!canvas) return;
-    const cssWidth = canvas.clientWidth || 640;
-    const cssHeight = canvas.clientHeight || 560;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssWidth = canvas.clientWidth || 900;
+    const cssHeight = canvas.clientHeight || 520;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const width = Math.max(1, Math.round(cssWidth * dpr));
     const height = Math.max(1, Math.round(cssHeight * dpr));
     if (canvas.width !== width || canvas.height !== height) {
@@ -340,23 +368,34 @@ export class CaptionCloud extends LitElement {
     ctx.clearRect(0, 0, width, height);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const measure = (text: string, fontSize: number) => {
-      ctx.font = `600 ${fontSize * dpr}px ui-sans-serif, system-ui, sans-serif`;
-      const metrics = ctx.measureText(text);
-      const ascent = metrics.actualBoundingBoxAscent || fontSize * dpr * 0.8;
-      const descent = metrics.actualBoundingBoxDescent || fontSize * dpr * 0.2;
-      return { width: metrics.width, height: ascent + descent };
-    };
-    this.placed = layoutCloud(this.words, width, height, measure);
+    const key = `${width}x${height}:${this.words.map((word) => `${word.text}:${word.count}`).join("|")}`;
+    if (key !== this.layoutKey) {
+      const measure = (text: string, fontSize: number, fontWeight: number) => {
+        setCloudFont(ctx, fontSize, fontWeight, dpr);
+        const metrics = ctx.measureText(text);
+        const ascent = metrics.actualBoundingBoxAscent || fontSize * dpr * 0.78;
+        const descent = metrics.actualBoundingBoxDescent || fontSize * dpr * 0.22;
+        const ink = (metrics.actualBoundingBoxLeft || 0) + (metrics.actualBoundingBoxRight || 0);
+        return { width: Math.max(metrics.width, ink), height: Math.max(ascent + descent, fontSize * dpr * 0.7) };
+      };
+      this.placed = layoutCloud(this.words, width, height, measure);
+      this.layoutKey = key;
+    }
     for (const word of this.placed) {
-      ctx.font = `600 ${word.fontSize * dpr}px ui-sans-serif, system-ui, sans-serif`;
+      setCloudFont(ctx, word.fontSize, word.fontWeight, dpr);
+      ctx.save();
+      ctx.translate(word.x, word.y);
+      ctx.rotate(word.rotation);
       if (word.text === this.hover) {
-        ctx.fillStyle = "rgba(142, 180, 255, 0.18)";
-        const pad = 6 * dpr;
-        ctx.fillRect(word.x - word.width / 2 - pad, word.y - word.height / 2 - pad, word.width + pad * 2, word.height + pad * 2);
+        const pad = 4 * dpr;
+        ctx.fillStyle = "rgba(186, 210, 245, 0.16)";
+        ctx.fillRect(-word.width / 2 - pad, -word.height / 2 - pad, word.width + pad * 2, word.height + pad * 2);
+        ctx.fillStyle = "#f7fbff";
+      } else {
+        ctx.fillStyle = word.color;
       }
-      ctx.fillStyle = word.color;
-      ctx.fillText(word.text, word.x, word.y);
+      ctx.fillText(word.text, 0, 0);
+      ctx.restore();
     }
   }
 
