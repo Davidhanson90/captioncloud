@@ -1,0 +1,29 @@
+{
+  "name": "captioncloud",
+  "version": "1.0.0",
+  "description": "Paste a YouTube URL, load its public caption track, and draw a word cloud. All in the browser.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Davidhanson90/captioncloud.git"
+  },
+  "homepage": "https://davidhanson90.github.io/captioncloud/",
+  "author": "David Graville",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "lit": "3.3.3"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "8.3.2"
+  }
+}
