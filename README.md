@@ -24,6 +24,8 @@ npm run preview
 2. Press **Load captions**.
 3. Hover a word in the cloud, or the list beside it, to see how many times it appears.
 
+After a YouTube video loads, the address bar gains `?v=VIDEO_ID` (via `history.replaceState`, so it can be copied). **Copy link** copies the full URL for this deployment, built from the Vite base: on the live site that is `https://davidhanson90.github.io/captioncloud/?v=VIDEO_ID`, and in dev it is `http://localhost:5173/captioncloud/?v=VIDEO_ID`. Opening that link fills the input and loads the cloud with no extra click. Pasted transcripts stay on the page only. They clear `?v=`, and they are not shareable links.
+
 **Try a TED talk** loads [Inside the Mind of a Master Procrastinator](https://www.youtube.com/watch?v=arj7oStGLkU) (`arj7oStGLkU`). That video has an English caption track. It was the one checked while building this demo: the track starts "So in college,".
 
 The page shows the video title when YouTube returns it, the caption language, how many words were in the track, and the first ~400 characters.

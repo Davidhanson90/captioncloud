@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { LitElement, css, html } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
 import { DEMO_VIDEO_ID, loadYouTubeCaptions, parseVideoId, type LoadedCaptions } from "./captions";
@@ -6,6 +7,27 @@ import { previewText, wordStats, type WordCount } from "./words";
 
 
 const CLOUD_FAMILY = "ui-sans-serif, system-ui, sans-serif";
+
+/** Absolute URL for this deployment, using Vite's base (`/captioncloud/` in dev and on Pages). */
+export function shareUrl(videoId: string): string {
+  const url = new URL(import.meta.env.BASE_URL, window.location.origin);
+  url.searchParams.set("v", videoId);
+  return url.href;
+}
+
+function replaceVideoParam(videoId: string): void {
+  const url = new URL(window.location.href);
+  if (videoId) {
+    if (url.searchParams.get("v") === videoId) return;
+    url.searchParams.set("v", videoId);
+  } else if (!url.searchParams.has("v")) {
+    return;
+  } else {
+    url.searchParams.delete("v");
+  }
+  const qs = url.searchParams.toString();
+  history.replaceState(null, "", `${url.pathname}${qs ? `?${qs}` : ""}${url.hash}`);
+}
 
 function setCloudFont(ctx: CanvasRenderingContext2D, fontSize: number, fontWeight: number, dpr: number): void {
   ctx.font = `${fontWeight} ${fontSize * dpr}px ${CLOUD_FAMILY}`;
@@ -79,6 +101,10 @@ export class CaptionCloud extends LitElement {
     button:disabled {
       opacity: 0.45;
       cursor: default;
+    }
+    button.copied {
+      border-color: #3d8f62;
+      color: #b7f0c2;
     }
     .title {
       margin: 0;
@@ -213,6 +239,7 @@ export class CaptionCloud extends LitElement {
   @state() private tip = "";
   @state() private tipX = 0;
   @state() private tipY = 0;
+  @state() private copied = false;
 
   @query("canvas") private canvas?: HTMLCanvasElement;
 
@@ -220,6 +247,24 @@ export class CaptionCloud extends LitElement {
   private layoutKey = "";
   private resizeObs?: ResizeObserver;
   private requestToken = 0;
+  private copiedTimer = 0;
+  private readQuery = false;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.readQuery) return;
+    this.readQuery = true;
+    const raw = (new URLSearchParams(window.location.search).get("v") ?? "").trim();
+    if (!raw) return;
+    const id = parseVideoId(raw);
+    if (!id) {
+      this.input = raw;
+      this.error = "Enter a YouTube URL or an 11-character video id.";
+      return;
+    }
+    this.input = id;
+    void this.loadId(id);
+  }
 
   private watchCanvas(): void {
     const canvas = this.canvas;
@@ -231,6 +276,7 @@ export class CaptionCloud extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.resizeObs?.disconnect();
+    window.clearTimeout(this.copiedTimer);
   }
 
   override updated(): void {
@@ -308,6 +354,33 @@ export class CaptionCloud extends LitElement {
     this.words = stats.top;
     this.hover = "";
     this.tip = "";
+    this.copied = false;
+    replaceVideoParam(loaded.videoId);
+  }
+
+  private async copyShareLink(): Promise<void> {
+    const id = this.loaded?.videoId;
+    if (!id) return;
+    const href = shareUrl(id);
+    try {
+      await navigator.clipboard.writeText(href);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = href;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.left = "-9999px";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      if (!ok) return;
+    }
+    this.copied = true;
+    window.clearTimeout(this.copiedTimer);
+    this.copiedTimer = window.setTimeout(() => {
+      this.copied = false;
+    }, 2000);
   }
 
   private onMove(event: MouseEvent): void {
@@ -421,6 +494,16 @@ export class CaptionCloud extends LitElement {
           />
           <button class="primary" type="submit" ?disabled=${this.loading}>Load captions</button>
           <button type="button" ?disabled=${this.loading} @click=${this.loadDemo}>Try a TED talk</button>
+          ${loaded?.videoId
+            ? html`<button
+                type="button"
+                class=${this.copied ? "copied" : ""}
+                aria-live="polite"
+                @click=${this.copyShareLink}
+              >
+                ${this.copied ? "Copied" : "Copy link"}
+              </button>`
+            : null}
         </form>
         ${this.status ? html`<p class="status">${this.status}</p>` : null}
         ${this.error ? html`<p class="status error">${this.error}</p>` : null}
