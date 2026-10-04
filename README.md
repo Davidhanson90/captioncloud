@@ -28,7 +28,7 @@ After a YouTube video loads, the address bar gains `?v=VIDEO_ID` (via `history.r
 
 **Try a TED talk** loads [Inside the Mind of a Master Procrastinator](https://www.youtube.com/watch?v=arj7oStGLkU) (`arj7oStGLkU`). That video has an English caption track. It was the one checked while building this demo: the track starts "So in college,".
 
-The page shows the video title when YouTube returns it, the caption language, how many words were in the track, and the first ~400 characters.
+The page shows the video title when YouTube returns it, the caption language, how many words were in the track, and the first ~400 characters. Above the cloud, a public thumbnail (`https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg`) is shown once a video id is loaded, including when the page opens with `?v=`. Pasted transcripts have no video id, so the thumbnail stays hidden. If that image fails to load, it is hidden without an error.
 
 English stopwords are dropped, and so are words shorter than 3 letters. The cloud is the top 80 remaining words, sized by count. Stage directions such as `(Laughter)` and `[Music]` are removed. Timestamps are not shown.
 

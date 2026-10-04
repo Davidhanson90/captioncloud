@@ -111,6 +111,13 @@ export class CaptionCloud extends LitElement {
       font-size: 1.05rem;
       font-weight: 600;
     }
+    .thumb {
+      display: block;
+      width: 100%;
+      max-width: 480px;
+      height: auto;
+      border-radius: 12px;
+    }
     .preview {
       max-width: 70ch;
     }
@@ -240,6 +247,7 @@ export class CaptionCloud extends LitElement {
   @state() private tipX = 0;
   @state() private tipY = 0;
   @state() private copied = false;
+  @state() private thumbHidden = false;
 
   @query("canvas") private canvas?: HTMLCanvasElement;
 
@@ -355,7 +363,12 @@ export class CaptionCloud extends LitElement {
     this.hover = "";
     this.tip = "";
     this.copied = false;
+    this.thumbHidden = false;
     replaceVideoParam(loaded.videoId);
+  }
+
+  private onThumbError(): void {
+    this.thumbHidden = true;
   }
 
   private async copyShareLink(): Promise<void> {
@@ -519,6 +532,14 @@ export class CaptionCloud extends LitElement {
                 </p>
                 <p class="preview">${preview}</p>
               </div>
+              ${loaded.videoId && !this.thumbHidden
+                ? html`<img
+                    class="thumb"
+                    alt=""
+                    src="https://i.ytimg.com/vi/${loaded.videoId}/hqdefault.jpg"
+                    @error=${this.onThumbError}
+                  />`
+                : null}
               <div class="stage">
                 <div class="cloud">
                   <canvas @mousemove=${this.onMove} @mouseleave=${this.onLeave}></canvas>
