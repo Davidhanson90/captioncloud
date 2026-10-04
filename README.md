@@ -32,7 +32,7 @@ Click a word in the cloud or in the side list to open the YouTube watch page in 
 
 The page shows the video title when YouTube returns it, the caption language, how many words were in the track, and the first ~400 characters. Above the cloud, a public thumbnail (`https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg`) is shown once a video id is loaded, including when the page opens with `?v=`. The thumbnail is a link to the YouTube watch page, `https://www.youtube.com/watch?v=VIDEO_ID`, and it opens in a new tab. If a seek time is already known, that link also has `&t=SECONDS`. Clicking a word still replaces the thumbnail with the embed; the embed itself is not a link. Pasted transcripts have no video id, so the thumbnail stays hidden. If that image fails to load, it is hidden without an error.
 
-English stopwords are dropped, and so are words shorter than 3 letters. The cloud is the top 80 remaining words, sized by count. Stage directions such as `(Laughter)` and `[Music]` are removed.
+English stopwords are dropped, and so are words shorter than 3 letters. The cloud and side list keep nouns only (a compact Brill primary-noun lexicon, plus a few clear noun endings such as -tion). The cloud is the top 80 remaining nouns, sized by count. Repeated phrases and words-per-minute still use every word. Stage directions such as `(Laughter)` and `[Music]` are removed.
 
 Timed captions also feed a panel under the cloud:
 

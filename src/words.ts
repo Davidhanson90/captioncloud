@@ -1,3 +1,5 @@
+import { ENGLISH_NOUN_LIST } from "./english-nouns";
+
 const STOPWORD_TEXT = `
 a about above after again against all am an and any are aren't as at be because been
 before being below between both but by can can't cannot could couldn't did didn't do
@@ -31,6 +33,15 @@ const STOPWORDS = new Set(
     .map((word) => word.toLowerCase().replace(/'/g, ""))
     .filter((word) => !["id", "ill", "im", "lets", "hes", "shes"].includes(word))
 );
+
+/** Primary NN/NNS lemmas from the Brill lexicon (pos-js). */
+const NOUNS = new Set(
+  ENGLISH_NOUN_LIST.split(/\s+/).filter((word) => word.length >= 3)
+);
+
+/** OOV noun-ish endings (timeless / procrastinator / happiness). */
+const NOUN_SUFFIX =
+  /(tion|tions|sion|sions|ment|ments|ness|nesses|ity|ities|ism|isms|ology|ographies|ography|ance|ances|ence|ences|ship|ships|hood|hoods|dom|doms|ure|ures|age|ages|ator|ators|ician|icians)$/;
 
 export interface WordCount {
   text: string;
@@ -69,13 +80,40 @@ export function isStopword(word: string): boolean {
   return STOPWORDS.has(word);
 }
 
+/** Simple plural → singular for lexicon lookup. */
+function singularize(word: string): string {
+  if (word.length < 4) return word;
+  if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`;
+  if (/(?:s|x|z|ch|sh)es$/.test(word) && word.length > 4) return word.slice(0, -2);
+  if (word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+
+/**
+ * True when `word` is an English noun we will show in the cloud / side list.
+ * Membership in the Brill primary-noun list (or its singular), or a clear noun suffix.
+ * Words that are primarily verbs in the lexicon (think, make, going) are not included.
+ */
+export function isNoun(word: string): boolean {
+  if (NOUNS.has(word)) return true;
+  const singular = singularize(word);
+  if (singular !== word && NOUNS.has(singular)) return true;
+  if (NOUN_SUFFIX.test(word)) return true;
+  if (singular !== word && NOUN_SUFFIX.test(singular)) return true;
+  return false;
+}
+
+function keepCloudWord(word: string): boolean {
+  return word.length >= 3 && !STOPWORDS.has(word) && isNoun(word);
+}
+
 /** First cue time for each cloud word. `text` must already be cleaned caption text. */
 export function firstSeenWords(parts: { start: number; text: string }[]): Map<string, number> {
   const seen = new Map<string, number>();
   for (const part of parts) {
     if (!Number.isFinite(part.start)) continue;
     for (const token of spokenTokens(part.text)) {
-      if (token.key.length < 3 || STOPWORDS.has(token.key) || seen.has(token.key)) continue;
+      if (!keepCloudWord(token.key) || seen.has(token.key)) continue;
       seen.set(token.key, part.start);
     }
   }
@@ -87,7 +125,7 @@ export function wordStats(text: string, limit = 80, firstSeen?: ReadonlyMap<stri
   let wordCount = 0;
   for (const token of spokenTokens(text)) {
     wordCount += 1;
-    if (token.key.length < 3 || STOPWORDS.has(token.key)) continue;
+    if (!keepCloudWord(token.key)) continue;
     counts.set(token.key, (counts.get(token.key) ?? 0) + 1);
   }
   const top = [...counts.entries()]
