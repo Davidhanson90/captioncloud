@@ -17,6 +17,13 @@ export function shareUrl(videoId: string): string {
   return url.href;
 }
 
+/** YouTube watch page. Adds `&t=` only when a seek time is already known. */
+export function youtubeWatchUrl(videoId: string, seconds?: number | null): string {
+  const base = `https://www.youtube.com/watch?v=${videoId}`;
+  if (seconds == null || !Number.isFinite(seconds)) return base;
+  return `${base}&t=${Math.max(0, Math.floor(seconds))}`;
+}
+
 function replaceVideoParam(videoId: string): void {
   const url = new URL(window.location.href);
   if (videoId) {
@@ -131,12 +138,23 @@ export class CaptionCloud extends LitElement {
       font-size: 1.05rem;
       font-weight: 600;
     }
+    .thumb-link {
+      display: block;
+      width: fit-content;
+      max-width: 100%;
+      border-radius: 12px;
+    }
+    .thumb-link:focus-visible {
+      outline: 2px solid #8eb4e8;
+      outline-offset: 3px;
+    }
     .thumb {
       display: block;
       width: 100%;
       max-width: 480px;
       height: auto;
       border-radius: 12px;
+      cursor: pointer;
     }
     .preview {
       max-width: 70ch;
@@ -571,9 +589,12 @@ export class CaptionCloud extends LitElement {
   }
 
   private seekTo(seconds: number | undefined): void {
-    if (!this.loaded?.videoId || seconds == null || !Number.isFinite(seconds)) return;
+    const videoId = this.loaded?.videoId;
+    if (!videoId || seconds == null || !Number.isFinite(seconds)) return;
+    const at = Math.max(0, Math.floor(seconds));
     this.playNonce += 1;
-    this.playAt = Math.max(0, Math.floor(seconds));
+    this.playAt = at;
+    window.open(youtubeWatchUrl(videoId, at), "_blank", "noopener,noreferrer");
   }
 
   private onLeave(): void {
@@ -721,7 +742,7 @@ export class CaptionCloud extends LitElement {
       <div class="wrap">
         <div>
           <h1>captioncloud</h1>
-          <p class="hint">Load a YouTube video that already has captions and draw a word cloud from the words. Click a word to play the first time it is said.</p>
+          <p class="hint">Load a YouTube video that already has captions and draw a word cloud from the words. Click a word to open YouTube at the first time it is said.</p>
         </div>
         <form class="row" @submit=${this.onSubmit}>
           <input
@@ -773,12 +794,20 @@ export class CaptionCloud extends LitElement {
                     ></iframe>`
                   )
                 : loaded.videoId && !this.thumbHidden
-                  ? html`<img
-                      class="thumb"
-                      alt=""
-                      src="https://i.ytimg.com/vi/${loaded.videoId}/hqdefault.jpg"
-                      @error=${this.onThumbError}
-                    />`
+                  ? html`<a
+                      class="thumb-link"
+                      href=${youtubeWatchUrl(loaded.videoId, this.playAt)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label=${loaded.title ? `Watch ${loaded.title} on YouTube` : "Watch on YouTube"}
+                    >
+                      <img
+                        class="thumb"
+                        alt=""
+                        src="https://i.ytimg.com/vi/${loaded.videoId}/hqdefault.jpg"
+                        @error=${this.onThumbError}
+                      />
+                    </a>`
                   : null}
               <div class="stage">
                 <div class="cloud">
